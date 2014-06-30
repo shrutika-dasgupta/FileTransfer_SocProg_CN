@@ -1,221 +1,112 @@
-NEWUDPL
+## README DOCUMENTATION ##
+
+--> Total files: 7
+	1)	Sender.java
+	2)	Receiver.java
+	3)	README_DOC
+	4)	newudpl
+	5)	file.txt (Sample file)
+	6)	1mb.txt (Sample file)
+	7) 	Makefile
+
+--> Sequence of steps in which the program must be run:
+	-1) Run the Proxy
+	-2) Run the Sender
+	-3) Run the Reciver 
+
+A)COMMAND LINE SYNTAX:
+
+
+	## SENDER ## : java Sender <FILE-NAME TO SEND> <REMOTE IP ADDRESS> <REMOTE PORT NUMBER> <ACK PORT NUMBER> <WINDOW SIZE> <LOGFILE>
+	
+	Attribute values :
+	<FILE-NAME TO SEND> : Name of the file to be sent validated on the command line for characters "a-z A-Z . _ 0-9 -"
+	<REMOTE IP ADDRESS>	: IP address of the remote host validated for the form a.b.c.d or 'localhost' on the command prompt
+	<REMOTE PORT NUMBER>: Remote port number to which the packets are sent--> in our case to the Proxy port
+	<ACK PORT NUMBER>	: Listening port where the Acknowledgement packet via the TCP connectopn between the sender and the receiver is received.
+	<WINDOW SIZE>		: Window size for sending the packet --> This program kept equal to 1.
+	<LOGFILE>			: Name of the logfile where in the log entries are to be printed.
+						-->	For the sender side log file the name of the log file stored as 
+							'<Name_of_logfile>_s' ---> to handle the problem that can occur when te sender and reciever have same log filenames.
+						--> When entered 'stdout' user --> logfile named 'stdout_s' created and the log entries are printed on the command prompt.
+	## RECEIVER ## :java Receiver <FILE-NAME TO BE RECEIVED> <LISTENING PORT> <REMOTE-IP> <REMOTE-PORT> <LOG-FILE>
+	<FILE-NAME TO SEND> : Name of copy of the file sent validated on the command line for characters "a-z A-Z . _ 0-9 -"
+	<LISTENING PORT>	: The port at which the packet is received.
+	<REMOTE IP ADDRESS>	: IP address of the remote host validated for the form a.b.c.d or 'localhost' on the command prompt
+	<REMOTE PORT NUMBER>: Remote port number to which the Acknowledgements are sent--> in our case to the sender port
+	<LOGFILE>			: Name of the logfile where in the log entries are to be printed.
+						-->	For the sender side log file the name of the log file stored as 
+							'<Name_of_logfile>_s' ---> to handle the problem that can occur when te sender and reciever have same log filenames.
+						--> When entered 'stdout' user --> logfile named 'stdout_r' created and the log entries are printed on the command prompt.
+
+
+B) IMPLEMENTATION OF THE PROGRAM:
+
+	(a) TCP Segment Structure : 
+		# SeqNo 		--> Unique for each Packet, sequenced in accordance to how packet is sent.
+		# AckNo 		--> Set when the acknowledgement is received, its like the sequence number for the acknowledgement.
+		# checksum		--> Calculated using .hashCode function for the entire packet along with the payload.
+		# window_size	--> Set to 1
+		# ACK-flag		--> Set when the acknowledgement packet is received.
+		# FIN-flag		--> Set when the last packet is sent.
+		# payload 		--> Contains the data into which the file is divided into. Payload is formed by converting the contents of the
+							file into a single substring and then sub-dividing it into substrings of fixed size.
+
+	Note:	The segment size can be varied and set using the 'max_segment_length' field which is made final.
+			The size of the header field comes to upto 15 bytes.
+			The size of each segement( Header + Payload ) is calculated to be equal to 
+				576 bytes i.e. 15 bytes of Header + 128 bytes of additional values added when convert into objects + 433 bytes of payload.
+			The file is subdivided into a segments of fixed size 576 bytes.
+
+	(b) Sender and Receiver states that are visited:
+		1) The Proxy is run with the values for the the 	--> Packet loss percentage set by : -L
+															--> Bit error value 			  : -B
+															--> Delay						  : -d
+		2) Next the sender is run in either of the two ways having the log file entry as:-
+			i) log_file_name
+			ii) stdout
+		  Next the reciever is run with the same either of the two ways as the sender.
+
+			- Initially the sender attributes and reciever attributes for command line arguments are checked for valid arguements. Then the UDP DatagramSocket is created for sending the packets to the recievers end.
+			- the packets are segmented into fixed size packets on the senders side. The header is attached to the payload and the final packet segments is created of size= max_segment_size value.
+			-the total number of packets that are created is sent over to the recivers end via the TCP connection that is created between the sender and the receiver keeping the proxy out of the connection.
+			- the header includes the checksum value of all the fields which is calculated via hashCode() and also included inside the header.
+			- the packet is sent over the TCP connection.
+			- when the packet is sent an entry of the packet sent is made inside to logfile (either with 'filename' or 'stdout')
+			- these packets are sent to the proxy where the either of the following happens:
+				i) the packets are dropped
+				ii) the packet transimission is delayed which causes the sender to re-transmit the packet again.
+				iii) Bit error is introduced inside the packet
+			- all the above  3 isues are handled on the receiver side and only then the acknowledgement packet is sent.
+			- when the ack is recived from the receiver via the TCP socket connectionthe entry of the ack packet recieved is made in the log file.
+			- thus the log file on the senders end has entries for the re-transmitted packets, acknowledged packet and the received acknowledgement packet. 
+			- If the user has given the log file name as 'stdout' then the log file entries are printed on the command prompt.
+			- The entry in the log file is made in the format
+				sent packets:"Source:(port/IP-Adress) Dest:(port/IP-Address) SeqNo:(#) AckNo:(#) FFACK:(ack-flag bit) FFIN:(flag-FIN-bit) TimeStamp"
+				ack received:"Source:(port/IP-Adress) Dest:(port/IP-Address) SeqNo:(#) AckNo:(#) FFACK:(ack-flag bit) FFIN:(flag-FIN-bit) TimeStamp RTT"
+			- the RTT value is calculated via the given formula:
+				newRTT = (alpha)oldRTT + (1-alpha)(sampleRTT);
+			-This is RTT value is taken as the Timeout for the the duration of re-transmission of the packets until the acknowledgement is not received.
+			-Later the final output is printed after successful delivery, that includes the number of bytes transfered, the number of segments in total transfered and the number of segments retransmitted.
+			- Abrupt termination of the console is also handled (Cntrl+C)
+			- I/O error is also handled
+			- "File not found" eror is also handled.
+		
+		3) For the receivers side, the packets are received and checked for
+			i) Error bit --> handled by checking the checksum value and putting entry into the log file for "CORRUPTED PACKETS".
+			ii) Duplicate packets --> The log entry checks for whether the packet that is received has its entry inside the log file already present or not--> if yes then these packets are discarded
+			
+		- everytime a packet is received whether duplicate or errored or correct packet and entry of it is made into the log file.
+		- the Acknowlegment of the packet that is sent is also recorded in the logfile along with its timestamp value.
+
+	(c) Loss Recovery Mechanism:
+		The program offers the mechanism to recover from all the 5 network issues:
+		1) Corrupt packet--> by checking the checksum value of the packet with the one that is sent with the packet and retransmit the packet if not matched.
+		2) Duplicate packets --> The duplicate packets are discarded by checking the entry of the packet in the logfile.
+		3) Delay introduced --> Delay is handled by re-transmitting the packet as its already being re-transmitted and the packets are dropped.
+		4) Out of Order delivery --> not included as the window size is only 1.
+		5) Packet loss --> When the packet is lost and and the acknowledgement is not received within the given timeout interval then the packet is retransmitted.
 
-NAME
-    newudpl - Network Emulator With UDP Link
 
-SYNOPSIS
 
-    newudpl [-[v|vv]] [-p [recv_port]:[send_port]]
-      [-i sorce_host[[:|/][port|*]]] [-o dest_host[[:|/]port] ]
-      [-s link_speed] [-d delay] [-e Ethernet_speed] [-q queue_buf_size]
-      [-B bit_error_rate] [-L random_packet_loss_rate] [-O out_of_order_rate]
 
-
-DESCRIPTION
-    This is a tool to create various condition of packet switching behavior 
-    artificially for UDP packets.
-
-    The emulator receives UDP packets on a designated port and then delays 
-    them, drops some randomly, corrupts the content, swaps the order of 
-    sending and emulates a finite-bandwidth link by queuing packets. It should 
-    be useful to examine an efficiency of network protocols or codecs.
-
-
-INSTALLATION
-    Source codes are available from: 
-    http://www.columbia.edu/~at541/src
-
-
-    To build, unpack the tar file, then type:
-
-    ./configure
-    make
-
-    I have only tested on SunOS 5.7, 5.8 system and Linux but it should 
-    compile on other Posix-compliant platforms.
-
-OPTIONS
-    -v 
-    -vv
-      Verbose output
-      With a single -v, 
-      the information of dropping packets by congestion and creating 
-      random packet loss/bit error/out of order will be displayed; 
-      with a second one, receiving and sending packets will also be shown. 
-
-    -p receiving port : sending port
-
-      Specifies the binding ip-port for receiving and sending UDP packets. 
-      Otherwise, default values will be used.
-
-        Available range: 1024 - 65535 or 0x400 - 0xFFFF
-        Default: receiving 41192, sending 41193
-
-    -s emulating link speed
-
-      Specifies a finite-bandwidth. The speed of Transferring UDP packets 
-      will not exceed this speed.  Unit is in kb/s.
-
-        Available range: 1 - 50000(MAX_KBPS)
-        Default: 1000
-
-    -e Ethernet speed
-
-      Specifies a Ethernet speed on the machine. It is used to calculate a 
-      tranmission delay, which makes difference especially when the emulating 
-      link speed is slow.
-
-        Available range: 1 for 10M, 2 for 100M, 3 for Gigabit Ethernet
-        Default: 10M(b/s)
-
-    -d delay
-
-      Specifies delay time.  All the packets will have minimum delay.  The 
-      deley for each packet could be varies, depenging on the link speed.
-      For example, -d2 is 2 (sec) and -d1.345678 is 1.345678 (sec).
-
-        Available range: 0 - 10(MAX_DELAYSEC) 
-        Default: 0
-
-    -q queue-buffer size
-
-      Specifies the size of queueing buffer for receiving packets. If you 
-      large this number, less likly to have packet loss by congestion for the 
-      same link speed.
-
-        Available range: 1 - 16384 or 0x1 - 0x4000(MAX_QBUFSIZE) 
-        Default: 8192
-
-    -i source host [[ : | / ] port | * ]
-
-      Specifies the source host for receiving packets. If the emulater 
-      receives a packet from a different host then the packet will be 
-      rejected. The host name could be either IP number with dotted-decimal 
-      notation (e.g., 128.59.16.8) or the host name (e.g., cs.columbia.edu). 
-      If the port is not sepcified then it will accept only packets from the 
-      the port 41191, default values, with corrsponding source host, but you 
-      could rule out this checking by using '*'.
-
-        Default: host - localhost, port 41191
-        Example,
-            -i dynamo.cs.columbia.edu/32768 
-            -i dynamo.cs.columbia.edu/0x8000 
-          -> accepts packets only from dynamo.cs.columbia.edu/32768 
-            -i diamond.cs.columbia.edu 
-          -> accepts packets only from diamond.cs.columbia.edu/41191
-            -i 128.59.16.7:* 
-          -> accepts packets any port from disco.cs.columbia.edu(128.59.16.7) 
-
-    -o destination host [[ : | / ] port ] 
-
-      Specifies a destination host for outgoing packets. 
-
-        Default: host - localhost, port 41194
-
-    -B bit error rate
-
-      Specifies a rate of genarating bit errors for outgoing packets. 
-      The rate is in 1/100000(BITERRDENOM).
-
-        Available range: 1 - 99999(BITERRDENOM - 1) 
-        Default: 0
-
-    -L random packet loss rate
-
-      Specifies a rate of genarating random packet loss for outgoing packets. 
-      The rate is in percentage.
-
-        Available range: 1 - 99 
-        Default: 0
-
-    -O out of order rate
-
-      Specifies a rate of randomizing oreder of packets.  The distination host 
-      will receive some packets in out of order in certain rate.
-      The rate is in percentage.
-
-        Available range: 1 - 99 
-        Default: 0
-
-
-USAGE
-    To create condition under following parameters,
-
-      from: dynamo.cs.columbia.edu(128.59.16.4)/41191
-      to: disco.cs.columbia.edu(128.59.16.7)/41194
-      link speed : 50(kb/s)
-      delay : 2.004000(sec)
-      no packet errors
-
-    type,
-
-      newudpl -idynamo.cs.columbia.edu -odisco.cs.columbia.edu -s50 -d2.004
-
-
-    For,
-      verbose mode
-      from: any port of dynamo.cs.columbia.edu(128.59.16.4)
-      to: disco.cs.columbia.edu(128.59.16.7)/32768
-      with error rate
-        random packet loss: 7(1/100 per packet)
-        bit error         : 5(1/100000 per bit)
-        out of order      : 9(1/100 per packet)
-
-      newudpl -idynamo.cs.columbia.edu/* -odisco.cs.columbia.edu:0x8000 -v -L7 
-        -B5 -O9
-
-
-    To stop the emulator,
-      1) press ctr-c
-      2) type any 'q' 'quit' 'stop' 'exit' from the console
-
-
-AUTHUR
-    Akira Tsukamoto
-    at541@columbia.edu
-
-
-ACKNOWLEDGEMENTS
-    For genarating a random variable corresponding to binomial distribution , 
-    I used the bnldev() function from 
-    William H. Press, Brian P. Flannery, Saul A. Teukolsky, William T. 
-    Vetterling, 'Numerical Recipes in C' The Press Syndicate of the University 
-    of Cambridge, 1992.
-
-    This emulator was developed under supervising by,
-    Wenyu Jiang http://www.cs.columbia.edu/~wenyu/
-    Henning Schulzrinne http://www.cs.columbia.edu/~hgs/
-
-    I referred many codes in rtptools to understand the multitimer function. 
-    http://www.cs.columbia.edu/IRT/software/rtptools/
-
-    Tetsu Iwama, He is good at math and taught me the rejection method.
-    Manager, Credit Risk Trading, Derivative Products Division, The Fuji Bank 
-    Limited, Mizuho Financial Group
-
-    Kuniyoshi Murata, He corrected my many English mistakes.
-    English-Japanese Interpreter mailto:kuni@ej-interpreter.net
-    Macintosh Webcast Specialist http://www.macwebcaster.com
-
-COPYRIGHT
-    Copyright (C) 2001 by Columbia University; all rights reserved 
-
-    Permission to use, copy, modify, and distribute this software and its 
-    documentation for not-for-profit research and educational purposes and 
-    without fee is hereby granted, provided that the above copyright notice 
-    appear in all copies and that both that the copyright notice and warranty 
-    disclaimer appear in supporting documentation, and that the names of the 
-    copyright holders or any of their entities not be used in advertising or 
-    publicity pertaining to distribution of the software without specific, 
-    written prior permission. Use of this software in whole or in parts for 
-    commercial advantage and by for-profit organizations requires a license. 
-    The copyright holders disclaim all warranties with regard to this 
-    software, including all implied warranties of merchantability and fitness. 
-    In no event shall the copyright holders be liable for any special, 
-    indirect or consequential damages or any damages whatsoever resulting from 
-    loss of use, data or profits, whether in an action of contract, negligence 
-    or other tortuous action, arising out of or in connection with the use or 
-    performance of this software. 
-
-
-Last updated: 2001-12-12 by Akira Tsukamoto 
